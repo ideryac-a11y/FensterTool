@@ -1,0 +1,172 @@
+import streamlit as st
+import pandas as pd
+from io import BytesIO
+from PIL import Image
+from fpdf import FPDF
+import tempfile
+import os
+
+st.set_page_config(page_title="Profi-Fensteraufmaß v6.7", layout="wide")
+
+# --- HILFSFUNKTIONEN ---
+def berechne_bestellmass(rechenwert, liste):
+    unterer_wert = 0
+    index = 0
+    for i, wert in enumerate(liste):
+        if wert <= rechenwert:
+            unterer_wert = wert
+            index = i
+        else: break
+    if unterer_wert == 0: return liste[0]
+    return unterer_wert if (rechenwert - unterer_wert) <= 5 else (liste[index + 1] if index + 1 < len(liste) else liste[-1])
+
+def runden_auf_5(zahl):
+    return 5 * round(zahl / 5)
+
+def generate_pdf(daten):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(200, 10, txt="Aufmass-Protokoll & Panzerliste", ln=True, align='C')
+    pdf.ln(10)
+    for entry in daten:
+        pdf.set_font("Arial", "B", 11)
+        pdf.cell(0, 8, txt=f"Pos: {entry.get('Pos', '??')} - {entry.get('Art', '??')}", ln=True)
+        pdf.set_font("Arial", "", 9)
+        # Strukturierte Ausgabe für das PDF
+        protokoll_text = (f"Bestellmass Fenster (BxH): {entry.get('Bestellmaß (BxH)', '??')} mm\n"
+                         f"PANZER-BESTELLMASS (BxH): {entry.get('Panzer-Maß', '??')} mm\n"
+                         f"Kastent.: {entry.get('Kastent.', '??')} | Deckel Neu: {entry.get('Deckel Neu', '??')}\n"
+                         f"Blech Fertigm.: {entry.get('Blech Fertigmaß', '??')} ({entry.get('Blech-F', '??')})\n"
+                         f"Bemerkungen: {entry.get('Bemerkungen', '')}")
+        pdf.multi_cell(0, 5, txt=protokoll_text.encode('latin-1', 'replace').decode('latin-1'))
+        if entry.get("Foto") is not None:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmpfile:
+                img = entry["Foto"].convert("RGB")
+                img.save(tmpfile.name, format="JPEG", quality=75)
+                pdf.image(tmpfile.name, w=45)
+                os.unlink(tmpfile.name)
+        pdf.ln(5); pdf.line(10, pdf.get_y(), 200, pdf.get_y()); pdf.ln(5)
+    return pdf.output(dest='S').encode('latin-1', 'replace')
+
+# --- INITIALISIERUNG ---
+if 'daten' not in st.session_state:
+    st.session_state.daten = []
+
+st.title("🏗️ Profi-Aufmaß v6.7 (Fenster & Panzer-Logik)")
+
+# --- SEITENLEISTE (EINGABE) ---
+with st.sidebar:
+    st.header("1. Altmaße & Foto")
+    pos = st.text_input("Position", f"{len(st.session_state.daten) + 1:02d}")
+    foto_file = st.camera_input("Foto aufnehmen")
+
+    st.subheader("Breite Innen (mm)")
+    b1 = st.number_input("Breite 1", value=1000)
+    b2 = st.number_input("Breite 2 (opt.)", value=0)
+    b3 = st.number_input("Breite 3 (opt.)", value=0)
+    breiten = [b for b in [b1, b2, b3] if b > 0]
+    m_b_in_avg = sum(breiten) / len(breiten) if breiten else 0
+    
+    st.subheader("Höhe Innen (mm)")
+    h1 = st.number_input("Höhe 1", value=1250)
+    h2 = st.number_input("Höhe 2 (opt.)", value=0)
+    h3 = st.number_input("Höhe 3 (opt.)", value=0)
+    hoehen = [h for h in [h1, h2, h3] if h > 0]
+    m_h_in_avg = sum(hoehen) / len(hoehen) if hoehen else 0
+
+    st.markdown("---")
+    dt1 = st.number_input("Deckeltiefe 1", value=140)
+    b_tiefe_alt = st.number_input("Bautiefe alt", value=70)
+    m_b_aus = st.number_input("Breite Außen", value=1000)
+    laibung = st.number_input("Laibungstiefe", value=150)
+    
+    st.header("2. Technik")
+    f_art = st.selectbox("Fensterart", ["DKR", "DKL", "Festverglasung", "DKL-DKR", "D-DKR", "DKL-D", "Fest-DKR", "DKL-Fest"])
+    kasten_typ = st.radio("Ausführung", ["Mit Kasten", "Ohne Kasten"])
+    schiene_t = st.radio("Schienentiefe (mm)", [40, 48]) if kasten_typ == "Mit Kasten" else 0
+    profil_t = st.selectbox("Profiltiefe Fenster (mm)", [70, 76, 80, 82])
+    
+    st.header("3. Optik & Sonstiges")
+    f_blech = st.selectbox("Farbe Blech", ["Silber", "Weiß", "Anthrazit", "Bronze"])
+    bemerkungen = st.text_area("Bemerkungen")
+
+    if st.button("💾 Pos. Speichern"):
+        # 1. Fenstermaß berechnen
+        br_b = m_b_in_avg - 12
+        br_h = (m_h_in_avg if kasten_typ == "Mit Kasten" else m_h_in_avg - 6)
+        
+        # 2. Panzermaß nach DEINEN Formeln berechnen
+        # Breite: Fensterbreite - 35
+        # Höhe: Fensterhöhe + 150
+        panzer_breite = br_b - 35
+        panzer_hoehe = br_h + 150
+        
+        # 3. Restliche Technik
+        kastentiefe = dt1 + b_tiefe_alt
+        deckeltiefe_neu = runden_auf_5(kastentiefe - (profil_t + schiene_t) + 10)
+        LIEFERANTEN_MASSE = [50, 70, 90, 110, 130, 150, 165, 180, 195, 210, 225, 240, 260, 280, 300, 320, 340, 360, 380, 400]
+        ausl_bestell = berechne_bestellmass(laibung + 10 + schiene_t + 45, LIEFERANTEN_MASSE)
+        
+        st.session_state.daten.append({
+            "Pos": pos, 
+            "Art": f_art,
+            "Ø Alt (BxH)": f"{m_b_in_avg:.0f}x{m_h_in_avg:.0f}",
+            "Bestellmaß (BxH)": f"{br_b:.1f}x{br_h:.1f}",
+            "Panzer-Maß": f"{panzer_breite:.1f}x{panzer_hoehe:.1f}",
+            "Kastent.": f"{kastentiefe:.1f}",
+            "Deckel Neu": f"{(m_b_in_avg+50):.1f}x{deckeltiefe_neu:.0f}",
+            "Blech Fertigmaß": f"{m_b_aus+30}x{ausl_bestell}",
+            "Blech-F": f_blech,
+            "Bemerkungen": bemerkungen,
+            "Foto": Image.open(foto_file) if foto_file else None
+        })
+        st.rerun()
+
+# --- HAUPTBEREICH ---
+if st.session_state.daten:
+    st.subheader("Aktuelle Aufmaß- & Bestellliste")
+    # Foto Spalte für die Tabellenübersicht weglassen
+    df_view = pd.DataFrame(st.session_state.daten).drop(columns=["Foto"])
+    st.dataframe(df_view, use_container_width=True)
+
+    st.markdown("---")
+    st.subheader("Positionen bearbeiten & sortieren")
+    for i, row in enumerate(st.session_state.daten):
+        with st.expander(f"Pos {row.get('Pos')} - {row.get('Art')} | Panzer: {row.get('Panzer-Maß')} mm"):
+            c1, c2, c3 = st.columns([1, 4, 1.5])
+            if row.get("Foto"): c1.image(row["Foto"], width=150)
+            c2.write(f"**Fenster:** {row.get('Bestellmaß (BxH)')} mm")
+            c2.write(f"**Panzer:** {row.get('Panzer-Maß')} mm (Berechnet: Breite-35, Höhe+150)")
+            c2.write(f"**Bemerkung:** {row.get('Bemerkungen', '-')}")
+            with c3:
+                st.write("Sortierung / Löschen:")
+                col_up, col_down, col_del = st.columns(3)
+                if col_up.button("⬆️", key=f"u_{i}") and i > 0:
+                    st.session_state.daten[i], st.session_state.daten[i-1] = st.session_state.daten[i-1], st.session_state.daten[i]
+                    st.rerun()
+                if col_down.button("⬇️", key=f"d_{i}") and i < len(st.session_state.daten)-1:
+                    st.session_state.daten[i], st.session_state.daten[i+1] = st.session_state.daten[i+1], st.session_state.daten[i]
+                    st.rerun()
+                if col_del.button("🗑️", key=f"x_{i}"):
+                    st.session_state.daten.pop(i)
+                    st.rerun()
+
+    # EXPORT-BEREICH
+    st.markdown("### Daten exportieren")
+    e1, e2, e3 = st.columns(3)
+    
+    # Excel
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_view.to_excel(writer, index=False)
+    e1.download_button("📊 Excel Export", data=output.getvalue(), file_name="Aufmass_Liste.xlsx")
+    
+    # PDF
+    pdf_data = generate_pdf(st.session_state.daten)
+    e2.download_button("📄 PDF inkl. Fotos & Panzer", data=pdf_data, file_name="Aufmass_Protokoll.pdf")
+    
+    if e3.button("⚠️ Komplette Liste leeren"):
+        st.session_state.daten = []
+        st.rerun()
