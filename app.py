@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-st.set_page_config(page_title="Profi-Fensteraufmaß v5.1", layout="wide")
+st.set_page_config(page_title="Profi-Fensteraufmaß v5.2", layout="wide")
 
 # --- STAMMDATEN ---
 LIEFERANTEN_MASSE = [50, 70, 90, 110, 130, 150, 165, 180, 195, 210, 225, 240, 260, 280, 300, 320, 340, 360, 380, 400]
@@ -67,6 +67,14 @@ with st.sidebar:
     st.markdown("---")
     st.header("2. Technik (Neu)")
     f_art = st.selectbox("Fensterart", FENSTERARTEN)
+    
+    # NEU: Verglasung
+    col_v1, col_v2 = st.columns(2)
+    with col_v1:
+        v_fach = st.selectbox("Verglasung", ["2-fach", "3-fach"], index=1)
+    with col_v2:
+        glas_typ = st.text_input("Glasart", "Klarglas")
+        
     kasten_typ = st.radio("Ausführung", ["Mit Kasten", "Ohne Kasten"])
     schiene_t = st.radio("Schienentiefe (mm)", [40, 48])
     profil_t = st.selectbox("Profiltiefe Fenster (mm)", PROFILTIEFEN)
@@ -120,6 +128,7 @@ with st.sidebar:
         st.session_state.daten.append({
             "Pos": pos,
             "Art": f_art,
+            "Glas": f"{v_fach} {glas_typ}",
             "Ø Alt (BxH)": f"{m_b_in_avg:.0f}x{m_h_in_avg:.0f}",
             "Fenster (BxH)": f"{br_b:.1f}x{br_h:.1f}",
             "Kastent.": f"{kastentiefe:.1f}",
@@ -150,7 +159,7 @@ if st.session_state.daten:
     
     col1, col2 = st.columns(2)
     with col1:
-        st.download_button("📊 Excel exportieren", data=output.getvalue(), file_name="Aufmass_Export_v5_1.xlsx")
+        st.download_button("📊 Excel exportieren", data=output.getvalue(), file_name="Aufmass_Export_v5_2.xlsx")
     with col2:
         if st.button("🗑️ Gesamte Liste leeren"):
             st.session_state.daten = []
