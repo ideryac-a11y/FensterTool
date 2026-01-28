@@ -2,26 +2,23 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-st.set_page_config(page_title="Profi-Fensteraufmaß v3.9", layout="wide")
+st.set_page_config(page_title="Profi-Fensteraufmaß v4.0", layout="wide")
 
-# --- STAMMDATEN ---
-LIEFERANTEN_MASSE = [50, 70, 90, 110, 130, 150, 165, 180, 195, 210, 225, 240, 260, 280, 300, 320, 340, 360, 380, 400]
-FARBEN_BLECH = ["Silber", "Weiß", "Anthrazit", "Bronze"]
-FARBEN_GURT = ["Silber", "Beige", "Weiß"]
-GURTWICKLER_MASSE = ["Kein Gurtwickler", "13,8 cm", "16,5 cm", "18,5 cm", "20,5 cm"]
+# --- Lade-Funktionen & Stammdaten ---
+L_MASSE = [50, 70, 90, 110, 130, 150, 165, 180, 195, 210, 225, 240, 260, 280, 300, 320, 340, 360, 380, 400]
 PROFILTIEFEN = [70, 76, 80, 82]
 FENSTERARTEN = ["DKR", "DKL", "Festverglasung", "DKL-DKR", "D-DKR", "DKL-D", "Fest-DKR", "DKL-Fest"]
 
-def berechne_bestellmass(rechenwert, liste):
-    unterer_wert = 0
-    index = 0
-    for i, wert in enumerate(liste):
-        if wert <= rechenwert:
-            unterer_wert = wert
-            index = i
+def hole_bestell_blech(wert, liste):
+    unter = 0
+    idx = 0
+    for i, w in enumerate(liste):
+        if w <= wert:
+            unter = w
+            idx = i
         else: break
-    if unterer_wert == 0: return liste[0]
-    return unterer_wert if (rechenwert - unterer_wert) <= 5 else (liste[index + 1] if index + 1 < len(liste) else liste[-1])
+    if unter == 0: return liste[0]
+    return unter if (wert - unter) <= 5 else (liste[idx + 1] if idx + 1 < len(liste) else liste[-1])
 
 if 'daten' not in st.session_state:
     st.session_state.daten = []
@@ -32,88 +29,77 @@ with st.sidebar:
     st.header("1. Altmaße")
     pos = st.text_input("Position", "01")
     
-    st.subheader("Lichte Breite Innen (mm)")
-    b1 = st.number_input("Breite 1", value=1000, min_value=0)
-    b2 = st.number_input("Breite 2 (opt.)", value=0, min_value=0)
-    b3 = st.number_input("Breite 3 (opt.)", value=0, min_value=0)
-    breiten_liste = [b for b in [b1, b2, b3] if b > 0]
-    m_b_in_avg = sum(breiten_liste) / len(breiten_liste) if breiten_liste else 0
-    st.caption(f"Ø Breite: {m_b_in_avg:.1f} mm")
-
-    st.subheader("Lichte Höhe Innen (mm)")
-    h1 = st.number_input("Höhe 1", value=1250, min_value=0)
-    h2 = st.number_input("Höhe 2 (opt.)", value=0, min_value=0)
-    h3 = st.number_input("Höhe 3 (opt.)", value=0, min_value=0)
-    hoehen_liste = [h for h in [h1, h2, h3] if h > 0]
-    m_h_in_avg = sum(hoehen_liste) / len(hoehen_liste) if hoehen_liste else 0
-    st.caption(f"Ø Höhe: {m_h_in_avg:.1f} mm")
+    b1 = st.number_input("Breite 1 (mm)", value=1000)
+    b2 = st.number_input("Breite 2 (mm)", value=0)
+    b3 = st.number_input("Breite 3 (mm)", value=0)
+    bl = [x for x in [b1, b2, b3] if x > 0]
+    avg_b = sum(bl)/len(bl) if bl else 0
     
-    st.markdown("---")
-    st.subheader("Deckeltiefe alt (mm)")
-    dt1 = st.number_input("Deckeltiefe 1", value=140, min_value=0)
-    dt2 = st.number_input("Deckeltiefe 2 (opt.)", value=0, min_value=0)
-    d_tiefen_liste = [dt for dt in [dt1, dt2] if dt > 0]
-    d_tiefe_alt_avg = sum(d_tiefen_liste) / len(d_tiefen_liste) if d_tiefen_liste else 0
-    st.caption(f"Ø Deckeltiefe: {d_tiefe_alt_avg:.1f} mm")
+    h1 = st.number_input("Höhe 1 (mm)", value=1250)
+    h2 = st.number_input("Höhe 2 (mm)", value=0)
+    h3 = st.number_input("Höhe 3 (mm)", value=0)
+    hl = [x for x in [h1, h2, h3] if x > 0]
+    avg_h = sum(hl)/len(hl) if hl else 0
+    st.caption(f"Ø Maß: {avg_b:.1f} x {avg_h:.1f}")
 
-    b_tiefe_alt = st.number_input("Bautiefe alt (mm)", value=70)
-    m_b_aus = st.number_input("Lichte Breite Außen (mm)", value=1000)
-    laibung = st.number_input("Laibungstiefe (mm)", value=150)
+    dt1 = st.number_input("Deckeltiefe 1", value=140)
+    dt2 = st.number_input("Deckeltiefe 2", value=0)
+    dl = [x for x in [dt1, dt2] if x > 0]
+    avg_dt = sum(dl)/len(dl) if dl else 0
     
-    st.markdown("---")
-    st.header("2. Technik (Neu)")
+    bau_alt = st.number_input("Bautiefe alt", value=70)
+    b_aus = st.number_input("Lichte Breite Außen", value=1000)
+    laibung = st.number_input("Laibungstiefe", value=150)
+
+    st.header("2. Technik")
     f_art = st.selectbox("Fensterart", FENSTERARTEN)
-    kasten_typ = st.radio("Ausführung", ["Mit Kasten", "Ohne Kasten"])
-    schiene_t = st.radio("Schienentiefe (mm)", [40, 48])
-    profil_t = st.selectbox("Profiltiefe Fenster (mm)", PROFILTIEFEN)
+    kasten = st.radio("Ausführung", ["Mit Kasten", "Ohne Kasten"])
+    schiene = st.radio("Schienentiefe", [40, 48])
+    prof = st.selectbox("Profiltiefe", PROFILTIEFEN)
     
-    st.markdown("---")
-    st.header("3. Rollladen-Zubehör")
-    welle_benoetigt = st.checkbox("Welle SW60 benötigt?", value=True)
-    welle_plus = st.number_input("Welle SW60 Zusatzmaß (mm)", value=0) if welle_benoetigt else 0
-    teleskop = st.checkbox("Teleskop-Endstück")
-    gurtrolle = st.checkbox("Gurtrolle")
-    zubehoer_frei = st.text_input("Sonstiges Zubehör (Freitext)", "")
+    st.header("3. Zubehör")
+    w_ja = st.checkbox("Welle SW60?", value=True)
+    w_plus = st.number_input("Welle Zusatzmaß", value=0) if w_ja else 0
+    frei = st.text_input("Zubehör Freitext", "")
     
-    st.markdown("---")
-    st.header("4. Gurt & Wickler")
-    gurt_bed = st.checkbox("Gurtbedienung?", value=True)
-    gurt_wick, gurt_f, v_laenge = "-", "-", "-"
-    if gurt_bed:
-        gurt_wick = st.selectbox("Gurtwickler (Lochabstand)", GURTWICKLER_MASSE[1:])
-        gurt_f = st.selectbox("Gurtfarbe", FARBEN_GURT, index=0)
-        v_laenge = "5 m" if m_h_in_avg <= 1300 else "6 m"
-    
-    st.markdown("---")
-    st.header("5. Bleche")
-    f_blech = st.selectbox("Farbe Blech", FARBEN_BLECH)
-    endstueck = st.radio("Endstück", ["Putzendstück", "Gleitendstück"])
+    st.header("4. Gurt")
+    g_ja = st.checkbox("Gurtbedienung?", value=True)
+    g_wick, g_f, g_l = "-", "-", "-"
+    if g_ja:
+        g_wick = st.selectbox("Wickler", ["13,8 cm", "16,5 cm", "18,5 cm", "20,5 cm"])
+        g_f = st.selectbox("Gurtfarbe", ["Silber", "Beige", "Weiß"])
+        g_l = "5 m" if avg_h <= 1300 else "6 m"
 
-    if st.button("💾 Pos. Speichern"):
-        kastentiefe = d_tiefe_alt_avg + b_tiefe_alt
-        bautiefe_neu = profil_t + schiene_t
-        deckeltiefe_neu = kastentiefe - bautiefe_neu + 10
-        br_b = m_b_in_avg - 15
-        br_h = (m_h_in_avg if kasten_typ == "Mit Kasten" else m_h_in_avg - 7.5)
-        pz_b, pz_h = br_b - 35, br_h + 150
-        blech_b = m_b_aus + 30
-        ausl_bestell = berechne_bestellmass(laibung + 10 + schiene_t + 45, LIEFERANTEN_MASSE)
-        deckel_b = m_b_in_avg + 50
-        welle_text = f"{m_b_in_avg + welle_plus:.1f} mm" if welle_benoetigt else "-"
-        
-        extras = [endstueck]
-        if teleskop: extras.append("Teleskop")
-        if gurtrolle: extras.append("Gurtrolle")
-        if zubehoer_frei: extras.append(zubehoer_frei)
+    if st.button("💾 Speichern"):
+        kt = avg_dt + bau_alt
+        b_neu = prof + schiene
+        d_neu_t = kt - b_neu + 10
+        f_b, f_h = avg_b - 15, (avg_h if kasten == "Mit Kasten" else avg_h - 7.5)
+        p_b, p_h = f_b - 35, f_h + 150
+        bl_b = b_aus + 30
+        bl_a = hole_bestell_blech(laibung + 10 + schiene + 45, L_MASSE)
+        w_t = f"{avg_b + w_plus:.1f}" if w_ja else "-"
         
         st.session_state.daten.append({
-            "Pos": pos, "Fensterart": f_art, "Ø Maße": f"{m_b_in_avg:.1f}x{m_h_in_avg:.1f}",
-            "Fenster (BxH)": f"{br_b:.1f}x{br_h:.1f}", "Kastentiefe": f"{kastentiefe:.1f}",
-            "Deckel Neu": f"{deckel_b:.1f}x{deckeltiefe_neu:.1f}", "Bautiefe Neu": bautiefe_neu,
-            "Panzer": f"{pz_b:.1f}x{pz_h:.1f}", "Welle": welle_text, "Blech": f"{blech_b}x{ausl_bestell}",
-            "Wickler/Gurt": f"{gurt_wick}/{v_laenge} ({gurt_f})" if gurt_bed else "-", "Extras": ", ".join(extras)
+            "Pos": pos, "Art": f_art, "Ø Alt": f"{avg_b:.0f}x{avg_h:.0f}",
+            "Fenster": f"{f_b:.1f}x{f_h:.1f}", "Kastent.": f"{kt:.1f}",
+            "Deckel Neu": f"{avg_b+50:.1f}x{d_neu_t:.1f}", "Bau Neu": b_neu,
+            "Panzer": f"{p_b:.0f}x{p_h:.0f}", "Welle": w_t, "Blech": f"{bl_b}x{bl_a}",
+            "Gurt": f"{g_wick}/{g_l}" if g_ja else "-", "Extras": frei
         })
-        st.success(f"Position {pos} gespeichert.")
+        st.success("Gespeichert!")
 
 if st.session_state.daten:
-    df = pd.DataFrame(st
+    df = pd.DataFrame(st.session_state.daten)
+    st.dataframe(df, use_container_width=True)
+    
+    out = BytesIO()
+    with pd.ExcelWriter(out, engine='xlsxwriter') as wr:
+        df.to_excel(wr, index=False)
+    
+    c1, c2 = st.columns(2)
+    with c1: st.download_button("Excel laden", out.getvalue(), "Aufmass.xlsx")
+    with c2: 
+        if st.button("Liste leeren"):
+            st.session_state.daten = []
+            st.rerun()
