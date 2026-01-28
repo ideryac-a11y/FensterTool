@@ -6,7 +6,7 @@ from fpdf import FPDF
 import tempfile
 import os
 
-st.set_page_config(page_title="Profi-Fensteraufmaß v6.4", layout="wide")
+st.set_page_config(page_title="Profi-Fensteraufmaß v6.5", layout="wide")
 
 # --- STAMMDATEN ---
 LIEFERANTEN_MASSE = [50, 70, 90, 110, 130, 150, 165, 180, 195, 210, 225, 240, 260, 280, 300, 320, 340, 360, 380, 400]
@@ -40,14 +40,13 @@ def generate_pdf(daten):
     pdf.ln(10)
     for entry in daten:
         pdf.set_font("Arial", "B", 11)
-        pdf.cell(0, 8, txt=f"Pos: {entry['Pos']} - {entry['Art']}", ln=True)
+        pdf.cell(0, 8, txt=f"Pos: {entry.get('Pos', '??')} - {entry.get('Art', '??')}", ln=True)
         pdf.set_font("Arial", "", 9)
-        # Umbenennung auch im PDF-Text
-        protokoll_text = (f"Bestellmass (BxH): {entry['Bestellmaß (BxH)']} | Glas: {entry['Glas']}\n"
-                         f"Kastent.: {entry['Kastent.']} | Deckel: {entry['Deckel Neu']}\n"
-                         f"Schienen: {entry['Schienen']} | Traverse: {entry['Traverse']}\n"
-                         f"Blech: {entry['Blech Fertigmaß']} ({entry['Blech-F']})\n"
-                         f"Bemerkungen: {entry['Bemerkungen']}")
+        protokoll_text = (f"Bestellmass (BxH): {entry.get('Bestellmaß (BxH)', '??')} | Glas: {entry.get('Glas', '??')}\n"
+                         f"Kastent.: {entry.get('Kastent.', '??')} | Deckel: {entry.get('Deckel Neu', '??')}\n"
+                         f"Schienen: {entry.get('Schienen', '??')} | Traverse: {entry.get('Traverse', '??')}\n"
+                         f"Blech: {entry.get('Blech Fertigmaß', '??')} ({entry.get('Blech-F', '??')})\n"
+                         f"Bemerkungen: {entry.get('Bemerkungen', '')}")
         pdf.multi_cell(0, 5, txt=protokoll_text.encode('latin-1', 'replace').decode('latin-1'))
         if entry.get("Foto") is not None:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmpfile:
@@ -61,7 +60,7 @@ def generate_pdf(daten):
 if 'daten' not in st.session_state:
     st.session_state.daten = []
 
-st.title("🏗️ Profi-Aufmaß v6.4")
+st.title("🏗️ Profi-Aufmaß v6.5")
 
 # --- SEITENLEISTE ---
 with st.sidebar:
@@ -137,7 +136,7 @@ with st.sidebar:
         st.session_state.daten.append({
             "Pos": pos, "Art": f_art, "Glas": f"{v_fach} {glas_typ}",
             "Ø Alt (BxH)": f"{m_b_in_avg:.0f}x{m_h_in_avg:.0f}", 
-            "Bestellmaß (BxH)": f"{br_b:.1f}x{br_h:.1f}", # Hier umbenannt
+            "Bestellmaß (BxH)": f"{br_b:.1f}x{br_h:.1f}", 
             "Kastent.": f"{kastentiefe:.1f}", "Deckel Neu": f"{(m_b_in_avg+50):.1f}x{deckeltiefe_neu:.0f}",
             "Bau Neu": f"{profil_t} mm", "Schienen": f"Ja ({schiene_t}mm)" if kasten_typ=="Mit Kasten" else "Nein",
             "Traverse": "Ja" if kasten_typ=="Mit Kasten" else "Nein", "Panzer": f"{pz_b:.0f}x{pz_h:.0f}",
@@ -157,11 +156,16 @@ if st.session_state.daten:
     st.markdown("---")
     st.subheader("Positionen sortieren / löschen")
     for i, row in enumerate(st.session_state.daten):
-        with st.expander(f"Pos {row['Pos']} - {row['Art']} ({row['Bestellmaß (BxH)']})"):
+        # Nutze .get(), um Absturz bei alten Spaltennamen zu verhindern
+        pos_label = row.get('Pos', '??')
+        art_label = row.get('Art', '??')
+        mass_label = row.get('Bestellmaß (BxH)', 'Altlast')
+        
+        with st.expander(f"Pos {pos_label} - {art_label} ({mass_label})"):
             c1, c2, c3 = st.columns([1, 4, 1.2])
-            if row["Foto"]: c1.image(row["Foto"], width=120)
-            c2.write(f"**Bestellmaß:** {row['Bestellmaß (BxH)']} | **Blech:** {row['Blech Fertigmaß']}")
-            c2.write(f"**Extras:** {row['Extras']} | **Bemerkung:** {row['Bemerkungen']}")
+            if row.get("Foto"): c1.image(row["Foto"], width=120)
+            c2.write(f"**Bestellmaß:** {mass_label} | **Blech:** {row.get('Blech Fertigmaß', '??')}")
+            c2.write(f"**Extras:** {row.get('Extras', '')} | **Bemerkung:** {row.get('Bemerkungen', '')}")
             with c3:
                 col_up, col_down, col_del = st.columns(3)
                 if col_up.button("⬆️", key=f"u_{i}") and i > 0:
