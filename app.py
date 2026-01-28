@@ -6,7 +6,7 @@ from fpdf import FPDF
 import tempfile
 import os
 
-st.set_page_config(page_title="Profi-Fensteraufmaß v6.2", layout="wide")
+st.set_page_config(page_title="Profi-Fensteraufmaß v6.3", layout="wide")
 
 # --- STAMMDATEN ---
 LIEFERANTEN_MASSE = [50, 70, 90, 110, 130, 150, 165, 180, 195, 210, 225, 240, 260, 280, 300, 320, 340, 360, 380, 400]
@@ -46,7 +46,6 @@ def generate_pdf(daten):
                          f"Kastent.: {entry['Kastent.']} | Deckel: {entry['Deckel Neu']}\n"
                          f"Schienen: {entry['Schienen']} | Traverse: {entry['Traverse']}\n"
                          f"Blech: {entry['Blech Fertigmaß']} ({entry['Blech-F']})\n"
-                         f"Welle: {entry['Welle']} | Wickler: {entry['Wickler']} ({entry['Gurt-F']})\n"
                          f"Extras: {entry['Extras']}\n"
                          f"Bemerkungen: {entry['Bemerkungen']}")
         pdf.multi_cell(0, 5, txt=protokoll_text.encode('latin-1', 'replace').decode('latin-1'))
@@ -62,55 +61,94 @@ def generate_pdf(daten):
 if 'daten' not in st.session_state:
     st.session_state.daten = []
 
-st.title("🏗️ Profi-Aufmaß v6.2 (Alle Infos & Editierbar)")
+st.title("🏗️ Profi-Aufmaß v6.3")
 
-# --- SEITENLEISTE (EINGABE v5.5) ---
+# --- SEITENLEISTE (EXAKT WIE v5.5) ---
 with st.sidebar:
     st.header("1. Altmaße & Foto")
     pos = st.text_input("Position", f"{len(st.session_state.daten) + 1:02d}")
-    foto_file = st.camera_input("Foto")
+    foto_file = st.camera_input("Foto aufnehmen")
 
-    b1 = st.number_input("Breite 1", value=1000)
-    h1 = st.number_input("Höhe 1", value=1250)
-    dt1 = st.number_input("Deckeltiefe 1", value=140)
-    b_tiefe_alt = st.number_input("Bautiefe alt", value=70)
-    m_b_aus = st.number_input("Lichte Breite Außen", value=1000)
-    laibung = st.number_input("Laibungstiefe", value=150)
+    st.subheader("Lichte Breite Innen (mm)")
+    b1 = st.number_input("Breite 1", value=1000, min_value=0)
+    b2 = st.number_input("Breite 2 (opt.)", value=0, min_value=0)
+    b3 = st.number_input("Breite 3 (opt.)", value=0, min_value=0)
+    breiten = [b for b in [b1, b2, b3] if b > 0]
+    m_b_in_avg = sum(breiten) / len(breiten) if breiten else 0
+    st.caption(f"Ø Breite: {m_b_in_avg:.1f} mm")
+
+    st.subheader("Lichte Höhe Innen (mm)")
+    h1 = st.number_input("Höhe 1", value=1250, min_value=0)
+    h2 = st.number_input("Höhe 2 (opt.)", value=0, min_value=0)
+    h3 = st.number_input("Höhe 3 (opt.)", value=0, min_value=0)
+    hoehen = [h for h in [h1, h2, h3] if h > 0]
+    m_h_in_avg = sum(hoehen) / len(hoehen) if hoehen else 0
+    st.caption(f"Ø Höhe: {m_h_in_avg:.1f} mm")
     
+    st.markdown("---")
+    st.subheader("Deckeltiefe alt (mm)")
+    dt1 = st.number_input("Deckeltiefe 1", value=140, min_value=0)
+    dt2 = st.number_input("Deckeltiefe 2 (opt.)", value=0, min_value=0)
+    d_tiefen = [dt for dt in [dt1, dt2] if dt > 0]
+    d_tiefe_alt_avg = sum(d_tiefen) / len(d_tiefen) if d_tiefen else 0
+    st.caption(f"Ø Deckeltiefe: {d_tiefe_alt_avg:.1f} mm")
+
+    b_tiefe_alt = st.number_input("Bautiefe alt (mm)", value=70)
+    m_b_aus = st.number_input("Lichte Breite Außen (mm)", value=1000)
+    laibung = st.number_input("Laibungstiefe (mm)", value=150)
+    
+    st.markdown("---")
     st.header("2. Technik (Neu)")
     f_art = st.selectbox("Fensterart", FENSTERARTEN)
-    v_fach = st.selectbox("Verglasung", ["2-fach", "3-fach"], index=1)
-    glas_typ = st.text_input("Glasart", "Klarglas")
-    kasten_typ = st.radio("Ausführung", ["Mit Kasten", "Ohne Kasten"])
-    schiene_t = st.radio("Schienentiefe", [40, 48]) if kasten_typ == "Mit Kasten" else 0
-    profil_t = st.selectbox("Profiltiefe Fenster", PROFILTIEFEN)
     
+    col_v1, col_v2 = st.columns(2)
+    with col_v1:
+        v_fach = st.selectbox("Verglasung", ["2-fach", "3-fach"], index=1)
+    with col_v2:
+        glas_typ = st.text_input("Glasart", "Klarglas")
+        
+    kasten_typ = st.radio("Ausführung", ["Mit Kasten", "Ohne Kasten"])
+    schiene_t = st.radio("Schienentiefe (mm)", [40, 48]) if kasten_typ == "Mit Kasten" else 0
+    profil_t = st.selectbox("Profiltiefe Fenster (mm)", PROFILTIEFEN)
+    
+    st.markdown("---")
     st.header("3. Rollladen-Zubehör")
-    welle_benoetigt = st.checkbox("Welle SW60?", value=True)
-    welle_plus = st.number_input("Welle Zusatzmaß (mm)", value=0) if welle_benoetigt else 0
+    welle_benoetigt = st.checkbox("Welle SW60 benötigt?", value=True)
+    welle_plus = st.number_input("Welle SW60 Zusatzmaß (mm)", value=0) if welle_benoetigt else 0
     teleskop = st.checkbox("Teleskop-Endstück")
     gurtrolle = st.checkbox("Gurtrolle")
-    zubehoer_frei = st.text_input("Sonstiges Zubehör", "")
+    zubehoer_frei = st.text_input("Sonstiges Zubehör (Freitext)", "")
     
+    st.markdown("---")
     st.header("4. Gurt & Wickler")
     gurt_bed = st.checkbox("Gurtbedienung?", value=True)
     gurt_wick = st.selectbox("Gurtwickler", GURTWICKLER_MASSE[1:]) if gurt_bed else "-"
     gurt_f = st.selectbox("Gurtfarbe", FARBEN_GURT) if gurt_bed else "-"
+    v_laenge = "5 m" if m_h_in_avg <= 1300 else "6 m"
     
-    st.header("5. Bleche")
+    st.markdown("---")
+    st.header("5. Bleche & Endstück")
     f_blech = st.selectbox("Farbe Blech", FARBEN_BLECH)
-    
+    endstueck_typ = st.radio("Endstück", ["Putzendstück", "Gleitendstück"])
+
+    st.markdown("---")
     st.header("6. Sonstiges")
-    bemerkungen = st.text_area("Bemerkungen")
+    bemerkungen = st.text_area("Bemerkungen / Sonderwünsche", "")
 
     if st.button("💾 Pos. Speichern"):
-        kastentiefe = dt1 + b_tiefe_alt
+        kastentiefe = d_tiefe_alt_avg + b_tiefe_alt
         bautiefe_neu = profil_t + schiene_t
         deckeltiefe_neu = runden_auf_5(kastentiefe - bautiefe_neu + 10)
-        br_b, br_h = b1 - 12, (h1 if kasten_typ == "Mit Kasten" else h1 - 6)
+        
+        br_b = m_b_in_avg - 12
+        br_h = (m_h_in_avg if kasten_typ == "Mit Kasten" else m_h_in_avg - 6)
+        
         pz_b, pz_h = br_b - 35, br_h + 150
+        blech_b = m_b_aus + 30
         ausl_bestell = berechne_bestellmass(laibung + 10 + schiene_t + 45, LIEFERANTEN_MASSE)
-        welle_text = f"{b1 + welle_plus:.1f} mm" if welle_benoetigt else "-"
+        deckel_b = m_b_in_avg + 50
+        
+        welle_text = f"{m_b_in_avg + welle_plus:.1f} mm" if welle_benoetigt else "-"
         
         extras_liste = []
         if teleskop: extras_liste.append("Teleskop")
@@ -119,35 +157,35 @@ with st.sidebar:
 
         st.session_state.daten.append({
             "Pos": pos, "Art": f_art, "Glas": f"{v_fach} {glas_typ}",
-            "Ø Alt (BxH)": f"{b1}x{h1}", "Fenster (BxH)": f"{br_b:.1f}x{br_h:.1f}",
-            "Kastent.": f"{kastentiefe:.1f}", "Deckel Neu": f"{b1+50}x{deckeltiefe_neu:.0f}",
+            "Ø Alt (BxH)": f"{m_b_in_avg:.0f}x{m_h_in_avg:.0f}", "Fenster (BxH)": f"{br_b:.1f}x{br_h:.1f}",
+            "Kastent.": f"{kastentiefe:.1f}", "Deckel Neu": f"{deckel_b:.1f}x{deckeltiefe_neu:.0f}",
             "Bau Neu": f"{profil_t} mm", "Schienen": f"Ja ({schiene_t}mm)" if kasten_typ=="Mit Kasten" else "Nein",
             "Traverse": "Ja" if kasten_typ=="Mit Kasten" else "Nein", "Panzer": f"{pz_b:.0f}x{pz_h:.0f}",
-            "Welle": welle_text, "Wickler": gurt_wick, "Gurt-L": "5/6m", "Gurt-F": gurt_f,
-            "Blech Fertigmaß": f"{m_b_aus+30}x{ausl_bestell}", "Blech-F": f_blech,
+            "Welle": welle_text, "Wickler": gurt_wick, "Gurt-L": v_laenge if gurt_bed else "-", "Gurt-F": gurt_f,
+            "Blech Fertigmaß": f"{blech_b}x{ausl_bestell}", "Blech-F": f_blech, "Endstück": endstueck_typ,
             "Extras": ", ".join(extras_liste), "Bemerkungen": bemerkungen,
             "Foto": Image.open(foto_file) if foto_file else None
         })
         st.rerun()
 
-# --- HAUPTBEREICH: TABELLE & EDIT ---
+# --- HAUPTBEREICH: TABELLE & BEARBEITUNG ---
 if st.session_state.daten:
-    st.subheader("Aktuelle Aufmaßliste")
+    st.subheader("Aktuelle Bestellliste")
     df_view = pd.DataFrame(st.session_state.daten).drop(columns=["Foto"])
     st.dataframe(df_view, use_container_width=True)
 
     st.markdown("---")
-    st.subheader("Positionen sortieren & löschen")
+    st.subheader("Positionen sortieren / löschen")
     for i, row in enumerate(st.session_state.daten):
-        with st.expander(f"Pos {row['Pos']} - {row['Art']} ({row['Fenster (BxH)']})", expanded=False):
-            c1, c2, c3 = st.columns([1, 4, 1])
+        with st.expander(f"Pos {row['Pos']} - {row['Art']} ({row['Fenster (BxH)']})"):
+            c1, c2, c3 = st.columns([1, 4, 1.2])
             with c1:
-                if row["Foto"]: st.image(row["Foto"], width=100)
+                if row["Foto"]: st.image(row["Foto"], width=120)
             with c2:
-                st.write(f"**Maße:** {row['Fenster (BxH)']} | **Schienen:** {row['Schienen']} | **Blech:** {row['Blech Fertigmaß']}")
-                st.write(f"**Extras:** {row['Extras']} | **Bemerkung:** {row['Bemerkungen']}")
+                st.write(f"**Maße:** {row['Fenster (BxH)']} mm | **Deckel:** {row['Deckel Neu']} mm")
+                st.write(f"**Blech:** {row['Blech Fertigmaß']} ({row['Blech-F']})")
+                st.write(f"**Extras:** {row['Extras']}")
             with c3:
-                # Steuerung
                 st.write("Aktion:")
                 col_up, col_down, col_del = st.columns(3)
                 if col_up.button("⬆️", key=f"u_{i}") and i > 0:
@@ -160,7 +198,7 @@ if st.session_state.daten:
                     st.session_state.daten.pop(i)
                     st.rerun()
 
-    st.markdown("### Export")
+    st.markdown("### Dokumente")
     e1, e2, e3 = st.columns(3)
     
     # Excel
@@ -171,7 +209,7 @@ if st.session_state.daten:
     
     # PDF
     pdf_data = generate_pdf(st.session_state.daten)
-    e2.download_button("📄 PDF Export (Fotos)", data=pdf_data, file_name="Protokoll.pdf")
+    e2.download_button("📄 PDF inkl. Fotos", data=pdf_data, file_name="Protokoll.pdf")
     
     if e3.button("⚠️ Alles löschen"):
         st.session_state.daten = []
