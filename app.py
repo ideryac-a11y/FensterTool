@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-st.set_page_config(page_title="Profi-Fensteraufmaß v3.7", layout="wide")
+st.set_page_config(page_title="Profi-Fensteraufmaß v4.9", layout="wide")
 
 # --- STAMMDATEN ---
 LIEFERANTEN_MASSE = [50, 70, 90, 110, 130, 150, 165, 180, 195, 210, 225, 240, 260, 280, 300, 320, 340, 360, 380, 400]
@@ -23,6 +23,9 @@ def berechne_bestellmass(rechenwert, liste):
     if unterer_wert == 0: return liste[0]
     return unterer_wert if (rechenwert - unterer_wert) <= 5 else (liste[index + 1] if index + 1 < len(liste) else liste[-1])
 
+def runden_auf_5(zahl):
+    return 5 * round(zahl / 5)
+
 if 'daten' not in st.session_state:
     st.session_state.daten = []
 
@@ -33,7 +36,6 @@ with st.sidebar:
     st.header("1. Altmaße")
     pos = st.text_input("Position", "01")
     
-    # BREITE MITTELWERT
     st.subheader("Lichte Breite Innen (mm)")
     b1 = st.number_input("Breite 1", value=1000, min_value=0)
     b2 = st.number_input("Breite 2 (opt.)", value=0, min_value=0)
@@ -42,7 +44,6 @@ with st.sidebar:
     m_b_in_avg = sum(breiten) / len(breiten) if breiten else 0
     st.caption(f"Ø Breite: {m_b_in_avg:.1f} mm")
 
-    # HÖHE MITTELWERT
     st.subheader("Lichte Höhe Innen (mm)")
     h1 = st.number_input("Höhe 1", value=1250, min_value=0)
     h2 = st.number_input("Höhe 2 (opt.)", value=0, min_value=0)
@@ -52,7 +53,6 @@ with st.sidebar:
     st.caption(f"Ø Höhe: {m_h_in_avg:.1f} mm")
     
     st.markdown("---")
-    # DECKELTIEFE MITTELWERT
     st.subheader("Deckeltiefe alt (mm)")
     dt1 = st.number_input("Deckeltiefe 1", value=140, min_value=0)
     dt2 = st.number_input("Deckeltiefe 2 (opt.)", value=0, min_value=0)
@@ -74,10 +74,7 @@ with st.sidebar:
     st.markdown("---")
     st.header("3. Rollladen-Zubehör")
     welle_benoetigt = st.checkbox("Welle SW60 benötigt?", value=True)
-    welle_plus = 0
-    if welle_benoetigt:
-        welle_plus = st.number_input("Welle SW60 Zusatzmaß (mm)", value=0)
-    
+    welle_plus = st.number_input("Welle SW60 Zusatzmaß (mm)", value=0) if welle_benoetigt else 0
     teleskop = st.checkbox("Teleskop-Endstück")
     gurtrolle = st.checkbox("Gurtrolle")
     zubehoer_frei = st.text_input("Sonstiges Zubehör (Freitext)", "")
@@ -94,16 +91,16 @@ with st.sidebar:
     st.markdown("---")
     st.header("5. Bleche")
     f_blech = st.selectbox("Farbe Blech", FARBEN_BLECH)
-    endstueck = st.radio("Endstück", ["Putzendstück", "Gleitendstück"])
+    endstueck_typ = st.radio("Endstück", ["Putzendstück", "Gleitendstück"])
 
     if st.button("💾 Pos. Speichern"):
         # --- BERECHNUNGSLOGIK ---
         kastentiefe = d_tiefe_alt_avg + b_tiefe_alt
         bautiefe_neu = profil_t + schiene_t
-        deckeltiefe_neu = kastentiefe - bautiefe_neu + 10
         
-        br_b = m_b_in_avg - 15
-        br_h = (m_h_in_avg if kasten_typ == "Mit Kasten" else m_h_in_avg - 7.5)
+        deckeltiefe_neu = runden_auf_5(kastentiefe - bautiefe_neu + 10)
+        br_b = m_b_in_avg - 12
+        br_h = (m_h_in_avg if kasten_typ == "Mit Kasten" else m_h_in_avg - 6)
         
         pz_b, pz_h = br_b - 35, br_h + 150
         blech_b = m_b_aus + 30
@@ -112,27 +109,29 @@ with st.sidebar:
         
         welle_text = f"{m_b_in_avg + welle_plus:.1f} mm" if welle_benoetigt else "-"
 
-        # Extras zusammenfassen
         extras_liste = []
         if teleskop: extras_liste.append("Teleskop")
         if gurtrolle: extras_liste.append("Gurtrolle")
-        extras_liste.append(endstueck)
         if zubehoer_frei: extras_liste.append(zubehoer_frei)
-        extras_text = ", ".join(extras_liste)
 
+        # Datensatz mit separaten Spalten für Farben
         st.session_state.daten.append({
             "Pos": pos,
-            "Fensterart": f_art,
-            "Breite/Höhe Ø": f"{m_b_in_avg:.1f}x{m_h_in_avg:.1f}",
+            "Art": f_art,
+            "Ø Alt (BxH)": f"{m_b_in_avg:.0f}x{m_h_in_avg:.0f}",
             "Fenster (BxH)": f"{br_b:.1f}x{br_h:.1f}",
-            "Kastentiefe": f"{kastentiefe:.1f} mm",
-            "Deckel Neu (BxT)": f"{deckel_b:.1f}x{deckeltiefe_neu:.1f}",
-            "Bautiefe Neu": f"{bautiefe_neu} mm",
-            "Panzer (BxH)": f"{pz_b:.1f}x{pz_h:.1f}",
-            "Welle SW60": welle_text,
-            "Blech (BxA)": f"{blech_b}x{ausl_bestell}",
-            "Wickler/Gurt": f"{gurt_wick} / {v_laenge} ({gurt_f})" if gurt_bed else "-",
-            "Extras": extras_text
+            "Kastent.": f"{kastentiefe:.1f}",
+            "Deckel Neu": f"{deckel_b:.1f}x{deckeltiefe_neu:.0f}",
+            "Bau Neu": bautiefe_neu,
+            "Panzer": f"{pz_b:.0f}x{pz_h:.0f}",
+            "Welle": welle_text,
+            "Wickler": gurt_wick if gurt_bed else "-",
+            "Gurt-L": v_laenge if gurt_bed else "-",
+            "Gurt-F": gurt_f if gurt_bed else "-",
+            "Blech": f"{blech_b}x{ausl_bestell}",
+            "Blech-F": f_blech,
+            "Endstück": endstueck_typ,
+            "Extras": ", ".join(extras_liste)
         })
         st.success(f"Position {pos} gespeichert.")
 
@@ -148,7 +147,7 @@ if st.session_state.daten:
     
     col1, col2 = st.columns(2)
     with col1:
-        st.download_button("📊 Excel exportieren", data=output.getvalue(), file_name="Fenster_Bestellung_V3_7.xlsx")
+        st.download_button("📊 Excel exportieren", data=output.getvalue(), file_name="Aufmass_Export.xlsx")
     with col2:
         if st.button("🗑️ Gesamte Liste leeren"):
             st.session_state.daten = []
