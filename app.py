@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-st.set_page_config(page_title="Profi-Fensteraufmaß v4.9", layout="wide")
+st.set_page_config(page_title="Profi-Fensteraufmaß v5.1", layout="wide")
 
 # --- STAMMDATEN ---
 LIEFERANTEN_MASSE = [50, 70, 90, 110, 130, 150, 165, 180, 195, 210, 225, 240, 260, 280, 300, 320, 340, 360, 380, 400]
@@ -89,16 +89,19 @@ with st.sidebar:
         v_laenge = "5 m" if m_h_in_avg <= 1300 else "6 m"
     
     st.markdown("---")
-    st.header("5. Bleche")
+    st.header("5. Bleche & Endstück")
     f_blech = st.selectbox("Farbe Blech", FARBEN_BLECH)
     endstueck_typ = st.radio("Endstück", ["Putzendstück", "Gleitendstück"])
 
+    st.markdown("---")
+    st.header("6. Sonstiges")
+    bemerkungen = st.text_area("Bemerkungen / Sonderwünsche", "")
+
     if st.button("💾 Pos. Speichern"):
-        # --- BERECHNUNGSLOGIK ---
         kastentiefe = d_tiefe_alt_avg + b_tiefe_alt
         bautiefe_neu = profil_t + schiene_t
-        
         deckeltiefe_neu = runden_auf_5(kastentiefe - bautiefe_neu + 10)
+        
         br_b = m_b_in_avg - 12
         br_h = (m_h_in_avg if kasten_typ == "Mit Kasten" else m_h_in_avg - 6)
         
@@ -114,7 +117,6 @@ with st.sidebar:
         if gurtrolle: extras_liste.append("Gurtrolle")
         if zubehoer_frei: extras_liste.append(zubehoer_frei)
 
-        # Datensatz mit separaten Spalten für Farben
         st.session_state.daten.append({
             "Pos": pos,
             "Art": f_art,
@@ -128,10 +130,11 @@ with st.sidebar:
             "Wickler": gurt_wick if gurt_bed else "-",
             "Gurt-L": v_laenge if gurt_bed else "-",
             "Gurt-F": gurt_f if gurt_bed else "-",
-            "Blech": f"{blech_b}x{ausl_bestell}",
+            "Blech Fertigmaß": f"{blech_b}x{ausl_bestell}",
             "Blech-F": f_blech,
             "Endstück": endstueck_typ,
-            "Extras": ", ".join(extras_liste)
+            "Extras": ", ".join(extras_liste),
+            "Bemerkungen": bemerkungen
         })
         st.success(f"Position {pos} gespeichert.")
 
@@ -147,7 +150,7 @@ if st.session_state.daten:
     
     col1, col2 = st.columns(2)
     with col1:
-        st.download_button("📊 Excel exportieren", data=output.getvalue(), file_name="Aufmass_Export.xlsx")
+        st.download_button("📊 Excel exportieren", data=output.getvalue(), file_name="Aufmass_Export_v5_1.xlsx")
     with col2:
         if st.button("🗑️ Gesamte Liste leeren"):
             st.session_state.daten = []
