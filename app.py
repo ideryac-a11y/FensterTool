@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-st.set_page_config(page_title="Profi-Fensteraufmaß v3.7", layout="wide")
+st.set_page_config(page_title="Profi-Fensteraufmaß v3.8", layout="wide")
 
 # --- STAMMDATEN ---
 LIEFERANTEN_MASSE = [50, 70, 90, 110, 130, 150, 165, 180, 195, 210, 225, 240, 260, 280, 300, 320, 340, 360, 380, 400]
@@ -33,8 +33,8 @@ with st.sidebar:
     st.header("1. Altmaße")
     pos = st.text_input("Position", "01")
     
-    # BREITE MITTELWERT
     st.subheader("Lichte Breite Innen (mm)")
     b1 = st.number_input("Breite 1", value=1000, min_value=0)
     b2 = st.number_input("Breite 2 (opt.)", value=0, min_value=0)
-    b3 = st.number_input("
+    b3 = st.number_input("Breite 3 (opt.)", value=0, min_value=0)
+    breiten = [b for b in
