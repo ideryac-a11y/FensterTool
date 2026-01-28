@@ -111,3 +111,10 @@ if st.session_state.daten:
             if st.button(f"Löschen {i}", key=f"del_{i}"):
                 st.session_state.daten.pop(i)
                 st.rerun()
+
+    # Excel Export (wie bisher)
+    df_export = pd.DataFrame(st.session_state.daten).drop(columns=["Foto"])
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        df_export.to_excel(writer, index=False)
+    st.download_button("📊 Excel laden", data=buffer.getvalue(), file_name="Aufmass.xlsx")
