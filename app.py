@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-st.set_page_config(page_title="Profi-Fensteraufmaß v3.3", layout="wide")
+st.set_page_config(page_title="Profi-Fensteraufmaß v3.6", layout="wide")
 
 # --- STAMMDATEN ---
 LIEFERANTEN_MASSE = [50, 70, 90, 110, 130, 150, 165, 180, 195, 210, 225, 240, 260, 280, 300, 320, 340, 360, 380, 400]
@@ -10,16 +10,7 @@ FARBEN_BLECH = ["Silber", "Weiß", "Anthrazit", "Bronze"]
 FARBEN_GURT = ["Silber", "Beige", "Weiß"]
 GURTWICKLER_MASSE = ["Kein Gurtwickler", "13,8 cm", "16,5 cm", "18,5 cm", "20,5 cm"]
 PROFILTIEFEN = [70, 76, 80, 82]
-FENSTERARTEN = [
-    "DKR", 
-    "DKL", 
-    "Festverglasung", 
-    "DKL-DKR", 
-    "D-DKR", 
-    "DKL-D", 
-    "Fest-DKR", 
-    "DKL-Fest"
-]
+FENSTERARTEN = ["DKR", "DKL", "Festverglasung", "DKL-DKR", "D-DKR", "DKL-D", "Fest-DKR", "DKL-Fest"]
 
 def berechne_bestellmass(rechenwert, liste):
     unterer_wert = 0
@@ -41,12 +32,37 @@ st.title("🏗️ Profi-Aufmaß: Fenster & Rollladen")
 with st.sidebar:
     st.header("1. Altmaße")
     pos = st.text_input("Position", "01")
-    m_b_in = st.number_input("Lichte Breite Innen (mm)", value=1000)
-    m_b_aus = st.number_input("Lichte Breite Außen (mm)", value=1000)
-    m_h_in = st.number_input("Lichte Höhe Innen (mm)", value=1250)
-    laibung = st.number_input("Laibungstiefe (mm)", value=150)
-    d_tiefe_alt = st.number_input("Deckeltiefe alt (mm)", value=140)
+    
+    # BREITE MITTELWERT
+    st.subheader("Lichte Breite Innen (mm)")
+    b1 = st.number_input("Breite 1", value=1000, min_value=0)
+    b2 = st.number_input("Breite 2 (opt.)", value=0, min_value=0)
+    b3 = st.number_input("Breite 3 (opt.)", value=0, min_value=0)
+    breiten = [b for b in [b1, b2, b3] if b > 0]
+    m_b_in_avg = sum(breiten) / len(breiten) if breiten else 0
+    st.caption(f"Ø Breite: {m_b_in_avg:.1f} mm")
+
+    # HÖHE MITTELWERT
+    st.subheader("Lichte Höhe Innen (mm)")
+    h1 = st.number_input("Höhe 1", value=1250, min_value=0)
+    h2 = st.number_input("Höhe 2 (opt.)", value=0, min_value=0)
+    h3 = st.number_input("Höhe 3 (opt.)", value=0, min_value=0)
+    hoehen = [h for h in [h1, h2, h3] if h > 0]
+    m_h_in_avg = sum(hoehen) / len(hoehen) if hoehen else 0
+    st.caption(f"Ø Höhe: {m_h_in_avg:.1f} mm")
+    
+    st.markdown("---")
+    # DECKELTIEFE MITTELWERT
+    st.subheader("Deckeltiefe alt (mm)")
+    dt1 = st.number_input("Deckeltiefe 1", value=140, min_value=0)
+    dt2 = st.number_input("Deckeltiefe 2 (opt.)", value=0, min_value=0)
+    d_tiefen = [dt for dt in [dt1, dt2] if dt > 0]
+    d_tiefe_alt_avg = sum(d_tiefen) / len(d_tiefen) if d_tiefen else 0
+    st.caption(f"Ø Deckeltiefe: {d_tiefe_alt_avg:.1f} mm")
+
     b_tiefe_alt = st.number_input("Bautiefe alt (mm)", value=70)
+    m_b_aus = st.number_input("Lichte Breite Außen (mm)", value=1000)
+    laibung = st.number_input("Laibungstiefe (mm)", value=150)
     
     st.markdown("---")
     st.header("2. Technik (Neu)")
@@ -68,7 +84,7 @@ with st.sidebar:
     if gurt_bed:
         gurt_wick = st.selectbox("Gurtwickler (Lochabstand)", GURTWICKLER_MASSE[1:])
         gurt_f = st.selectbox("Gurtfarbe", FARBEN_GURT, index=0)
-        v_laenge = "5 m" if m_h_in <= 1300 else "6 m"
+        v_laenge = "5 m" if m_h_in_avg <= 1300 else "6 m"
     
     st.markdown("---")
     st.header("5. Bleche")
@@ -77,32 +93,35 @@ with st.sidebar:
 
     if st.button("💾 Pos. Speichern"):
         # --- BERECHNUNGSLOGIK ---
-        kastentiefe = d_tiefe_alt + b_tiefe_alt
+        # Kastentiefe basiert auf Mittelwert Deckeltiefe + Bautiefe alt
+        kastentiefe = d_tiefe_alt_avg + b_tiefe_alt
         bautiefe_neu = profil_t + schiene_t
+        # Formel: Kastentiefe - Bautiefe neu + 10mm
         deckeltiefe_neu = kastentiefe - bautiefe_neu + 10
         
-        br_b = m_b_in - 15
-        br_h = (m_h_in if kasten_typ == "Mit Kasten" else m_h_in - 7.5)
+        br_b = m_b_in_avg - 15
+        br_h = (m_h_in_avg if kasten_typ == "Mit Kasten" else m_h_in_avg - 7.5)
+        
         pz_b, pz_h = br_b - 35, br_h + 150
         blech_b = m_b_aus + 30
         ausl_bestell = berechne_bestellmass(laibung + 10 + schiene_t + 45, LIEFERANTEN_MASSE)
-        deckel_b = m_b_in + 50
-        welle_ges = m_b_in + welle_plus
+        deckel_b = m_b_in_avg + 50
+        welle_ges = m_b_in_avg + welle_plus
 
         st.session_state.daten.append({
             "Pos": pos,
             "Fensterart": f_art,
-            "Fenster (BxH)": f"{br_b}x{br_h}",
+            "Breite/Höhe Ø": f"{m_b_in_avg:.1f}x{m_h_in_avg:.1f}",
+            "Fenster (BxH)": f"{br_b:.1f}x{br_h:.1f}",
+            "Kastentiefe": f"{kastentiefe:.1f} mm",
+            "Deckel Neu (BxT)": f"{deckel_b:.1f}x{deckeltiefe_neu:.1f}",
             "Bautiefe Neu": f"{bautiefe_neu} mm",
-            "Deckel Neu (BxT)": f"{deckel_b}x{deckeltiefe_neu}",
-            "Kastentiefe": f"{kastentiefe} mm",
-            "Panzer (BxH)": f"{pz_b}x{pz_h}",
-            "Welle SW60": f"{welle_ges} mm",
+            "Panzer (BxH)": f"{pz_b:.1f}x{pz_h:.1f}",
             "Blech (BxA)": f"{blech_b}x{ausl_bestell}",
             "Wickler/Gurt": f"{gurt_wick} / {v_laenge} ({gurt_f})" if gurt_bed else "-",
             "Extras": f"{'Teleskop, ' if teleskop else ''}{'Gurtrolle, ' if gurtrolle else ''}{endstueck}"
         })
-        st.success(f"Position {pos} ({f_art}) gespeichert!")
+        st.success(f"Position {pos} gespeichert.")
 
 # --- HAUPTBEREICH ---
 if st.session_state.daten:
@@ -116,7 +135,7 @@ if st.session_state.daten:
     
     col1, col2 = st.columns(2)
     with col1:
-        st.download_button("📊 Excel exportieren", data=output.getvalue(), file_name="Fenster_Bestellung_V3_3.xlsx")
+        st.download_button("📊 Excel exportieren", data=output.getvalue(), file_name="Fenster_Bestellung_V3_6.xlsx")
     with col2:
         if st.button("🗑️ Gesamte Liste leeren"):
             st.session_state.daten = []
