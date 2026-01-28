@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-st.set_page_config(page_title="Profi-Fensteraufmaß v5.3", layout="wide")
+st.set_page_config(page_title="Profi-Fensteraufmaß v5.5", layout="wide")
 
 # --- STAMMDATEN ---
 LIEFERANTEN_MASSE = [50, 70, 90, 110, 130, 150, 165, 180, 195, 210, 225, 240, 260, 280, 300, 320, 340, 360, 380, 400]
@@ -76,7 +76,6 @@ with st.sidebar:
         
     kasten_typ = st.radio("Ausführung", ["Mit Kasten", "Ohne Kasten"])
     
-    # Schienentiefe nur relevant, wenn mit Kasten
     schiene_t = 0
     if kasten_typ == "Mit Kasten":
         schiene_t = st.radio("Schienentiefe (mm)", [40, 48])
@@ -124,13 +123,12 @@ with st.sidebar:
         
         welle_text = f"{m_b_in_avg + welle_plus:.1f} mm" if welle_benoetigt else "-"
 
-        # Logik für Schienen und Traverse
+        # Logik für die separaten Spalten
         bau_neu_text = f"{profil_t} mm"
-        extras_liste = []
-        if kasten_typ == "Mit Kasten":
-            bau_neu_text = f"{bautiefe_neu} mm (inkl. Schiene {schiene_t})"
-            extras_liste.append("Abrolltraverse")
+        schiene_info = f"Ja ({schiene_t} mm)" if kasten_typ == "Mit Kasten" else "Nein"
+        traverse_info = "Ja" if kasten_typ == "Mit Kasten" else "Nein"
         
+        extras_liste = []
         if teleskop: extras_liste.append("Teleskop")
         if gurtrolle: extras_liste.append("Gurtrolle")
         if zubehoer_frei: extras_liste.append(zubehoer_frei)
@@ -144,6 +142,8 @@ with st.sidebar:
             "Kastent.": f"{kastentiefe:.1f}",
             "Deckel Neu": f"{deckel_b:.1f}x{deckeltiefe_neu:.0f}",
             "Bau Neu": bau_neu_text,
+            "Schienen": schiene_info,
+            "Traverse": traverse_info,
             "Panzer": f"{pz_b:.0f}x{pz_h:.0f}",
             "Welle": welle_text,
             "Wickler": gurt_wick if gurt_bed else "-",
@@ -169,7 +169,7 @@ if st.session_state.daten:
     
     col1, col2 = st.columns(2)
     with col1:
-        st.download_button("📊 Excel exportieren", data=output.getvalue(), file_name="Aufmass_Export_v5_3.xlsx")
+        st.download_button("📊 Excel exportieren", data=output.getvalue(), file_name="Aufmass_Export_v5_5.xlsx")
     with col2:
         if st.button("🗑️ Gesamte Liste leeren"):
             st.session_state.daten = []
