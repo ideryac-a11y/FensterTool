@@ -1,10 +1,14 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+from PIL import Image
+from fpdf import FPDF
+import tempfile
+import os
 
-st.set_page_config(page_title="Profi-Fensteraufmaß v5.5", layout="wide")
+st.set_page_config(page_title="Profi-Fensteraufmaß v6.0", layout="wide")
 
-# --- STAMMDATEN ---
+# --- STAMMDATEN (v5.5) ---
 LIEFERANTEN_MASSE = [50, 70, 90, 110, 130, 150, 165, 180, 195, 210, 225, 240, 260, 280, 300, 320, 340, 360, 380, 400]
 FARBEN_BLECH = ["Silber", "Weiß", "Anthrazit", "Bronze"]
 FARBEN_GURT = ["Silber", "Beige", "Weiß"]
@@ -12,6 +16,7 @@ GURTWICKLER_MASSE = ["Kein Gurtwickler", "13,8 cm", "16,5 cm", "18,5 cm", "20,5 
 PROFILTIEFEN = [70, 76, 80, 82]
 FENSTERARTEN = ["DKR", "DKL", "Festverglasung", "DKL-DKR", "D-DKR", "DKL-D", "Fest-DKR", "DKL-Fest"]
 
+# --- HILFSFUNKTIONEN ---
 def berechne_bestellmass(rechenwert, liste):
     unterer_wert = 0
     index = 0
@@ -26,16 +31,53 @@ def berechne_bestellmass(rechenwert, liste):
 def runden_auf_5(zahl):
     return 5 * round(zahl / 5)
 
+def generate_pdf(daten):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(200, 10, txt="Aufmass-Protokoll", ln=True, align='C')
+    pdf.ln(10)
+    
+    for entry in daten:
+        pdf.set_font("Arial", "B", 11)
+        pdf.cell(0, 8, txt=f"Pos: {entry['Pos']} - Art: {entry['Art']}", ln=True, fill=False)
+        
+        pdf.set_font("Arial", "", 9)
+        # Text-Inhalt für PDF (Sonderzeichen bereinigt)
+        protokoll_text = (
+            f"Fenstermass: {entry['Fenster (BxH)']} | Glas: {entry['Glas']}\n"
+            f"Blech Fertigmass: {entry['Blech Fertigmaß']} | Farbe: {entry['Blech-F']}\n"
+            f"Schienen: {entry['Schienen']} | Traverse: {entry['Traverse']}\n"
+            f"Bemerkungen: {entry['Bemerkungen']}"
+        )
+        pdf.multi_cell(0, 5, txt=protokoll_text.encode('latin-1', 'replace').decode('latin-1'))
+        
+        if entry.get("Foto") is not None:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmpfile:
+                img = entry["Foto"].convert("RGB")
+                img.save(tmpfile.name, format="JPEG", quality=75)
+                pdf.image(tmpfile.name, w=50) # Bildbreite 50mm
+                os.unlink(tmpfile.name)
+        
+        pdf.ln(5)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.ln(5)
+    return pdf.output(dest='S').encode('latin-1', 'replace')
+
 if 'daten' not in st.session_state:
     st.session_state.daten = []
 
-st.title("🏗️ Profi-Aufmaß: Fenster & Rollladen")
+st.title("🏗️ Profi-Aufmaß: Fenster & Rollladen v6.0")
 
-# --- SEITENLEISTE (EINGABE) ---
+# --- SEITENLEISTE (EINGABE v5.5 Layout) ---
 with st.sidebar:
-    st.header("1. Altmaße")
-    pos = st.text_input("Position", "01")
+    st.header("1. Altmaße & Foto")
+    pos = st.text_input("Position", f"{len(st.session_state.daten) + 1:02d}")
     
+    # NEU: Foto-Option
+    foto_file = st.camera_input("Foto der Position")
+
     st.subheader("Lichte Breite Innen (mm)")
     b1 = st.number_input("Breite 1", value=1000, min_value=0)
     b2 = st.number_input("Breite 2 (opt.)", value=0, min_value=0)
@@ -123,7 +165,6 @@ with st.sidebar:
         
         welle_text = f"{m_b_in_avg + welle_plus:.1f} mm" if welle_benoetigt else "-"
 
-        # Logik für die separaten Spalten
         bau_neu_text = f"{profil_t} mm"
         schiene_info = f"Ja ({schiene_t} mm)" if kasten_typ == "Mit Kasten" else "Nein"
         traverse_info = "Ja" if kasten_typ == "Mit Kasten" else "Nein"
@@ -135,6 +176,7 @@ with st.sidebar:
 
         st.session_state.daten.append({
             "Pos": pos,
+            "Foto": Image.open(foto_file) if foto_file else None,
             "Art": f_art,
             "Glas": f"{v_fach} {glas_typ}",
             "Ø Alt (BxH)": f"{m_b_in_avg:.0f}x{m_h_in_avg:.0f}",
@@ -161,17 +203,25 @@ with st.sidebar:
 if st.session_state.daten:
     df = pd.DataFrame(st.session_state.daten)
     st.subheader("Aktuelle Bestellliste")
-    st.dataframe(df, use_container_width=True)
+    # Foto Spalte für die Anzeige im Dataframe ausblenden
+    st.dataframe(df.drop(columns=["Foto"]), use_container_width=True)
 
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Bestellung')
+    col_down1, col_down2, col_down3 = st.columns(3)
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.download_button("📊 Excel exportieren", data=output.getvalue(), file_name="Aufmass_Export_v5_5.xlsx")
-    with col2:
+    with col_down1:
+        # Excel Export (ohne Fotos)
+        df_excel = df.drop(columns=["Foto"])
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_excel.to_excel(writer, index=False, sheet_name='Bestellung')
+        st.download_button("📊 Excel exportieren", data=output.getvalue(), file_name="Aufmass_Export.xlsx")
+    
+    with col_down2:
+        # PDF Export (mit Fotos)
+        pdf_data = generate_pdf(st.session_state.daten)
+        st.download_button("📄 PDF inkl. Fotos", data=pdf_data, file_name="Aufmass_Protokoll.pdf", mime="application/pdf")
+    
+    with col_down3:
         if st.button("🗑️ Gesamte Liste leeren"):
             st.session_state.daten = []
             st.rerun()
-        
